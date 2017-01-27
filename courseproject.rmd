@@ -1,0 +1,121 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "farhan"
+date: "January 24, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+For this project, given data from device accelerometer on  6 various device research study participants. Training data consists of accelerometer data and a label identifying the quality of the activity the participant was doing. Testing data consists of accelerometer data without the identifying label. The objective is to predict the labels for the test set observations.
+
+Below is the coding create the model machine learning which are estimating the out-of-sample error, and making predictions. To understand the step, this report will describe each step process. 
+
+## Data Preparation
+Load the caret package, and read in the training and testing data:
+
+```{r}
+setwd("D:/Users/TM35460/Desktop/coursera/practical machine learning")
+library(caret)
+```
+```{r}
+trainingDataSet<- read.csv("pml-training.csv", sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+testingDataSet<- read.csv("pml-testing.csv", sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+dim(trainingDataSet)
+dim(testingDataSet)
+```
+On the training set , we seen data consists of 19622 values of 160 variables.
+On the testing set, we seen data consists of 20 values of 160 variables.
+For purpose precaution action, include command to remove columns with missing values
+
+```{r}
+trainingDataSet <- trainingDataSet[,(colSums(is.na(trainingDataSet)) == 0)]
+dim(trainingDataSet)
+
+testingDataSet <- testingDataSet[,(colSums(is.na(testingDataSet)) == 0)]
+dim(testingDataSet)
+```
+## Preprocess the data
+
+process the data
+```{r}
+numericalsIdx <- which ( lapply ( trainingDataSet, class) %in% "numeric")
+
+preprocessModel <-preProcess(trainingDataSet[,numericalsIdx],method=c('knnImpute', 'center', 'scale'))
+pre_trainingDataSet <- predict(preprocessModel, trainingDataSet[,numericalsIdx])
+pre_trainingDataSet$classe <- trainingDataSet$classe
+
+pre_testingDataSet <-predict(preprocessModel,testingDataSet[,numericalsIdx])
+```
+
+***Clearing the non zero variables***
+
+Clear the variables with values near zero, that means that they have not so much meaning in the predictions
+
+```{r}
+nzv <- nearZeroVar(pre_trainingDataSet,saveMetrics=TRUE)
+pre_trainingDataSet <- pre_trainingDataSet[,nzv$nzv==FALSE]
+
+nzv <- nearZeroVar(pre_testingDataSet,saveMetrics=TRUE)
+pre_testingDataSet <- pre_testingDataSet[,nzv$nzv==FALSE]
+```
+## Model building
+
+I decide to use 75% observation training dataset to train our model. We will then validate it on the last 70%.
+
+```{r}
+set.seed(12031987)
+idxTrain<- createDataPartition(pre_trainingDataSet$classe, p=3/4, list=FALSE)
+training<- pre_trainingDataSet[idxTrain, ]
+validation <- pre_trainingDataSet[-idxTrain, ]
+dim(training) ; dim(validation)
+```
+
+the data for training we create as "training" and the data for validation we create as "validation".
+
+
+
+***Build Train Modeling***
+
+The data training we train use random forest with a cross validation of 5 classes.
+
+```{r}
+library(randomForest)
+modFitrf <- train (classe ~., method="rf", data=training, trControl=trainControl(method='cv'), number=5, allowParallel=TRUE, importance=TRUE )
+modFitrf
+```
+
+## Cross Validation Testing and Out-of-Sample Error Estimate
+Let's apply our training model on our testing database, to check its accuracy.
+
+Accuracy and Estimated out of sample error
+
+```{r}
+predValidRF <- predict(modFitrf, validation)
+confus <- confusionMatrix(validation$classe, predValidRF)
+confus$table
+```
+We can notice that there are very few variables out of this model.
+```{r}
+accur <- postResample(validation$classe, predValidRF)
+modAccuracy <- accur[[1]]
+modAccuracy
+```
+```{r}
+out_of_sample_error <- 1 - modAccuracy
+out_of_sample_error
+```
+The summary of the model seen the estimated accuracy of the model is 99.6% and estimated out-of-sample error (means data not fitted model applied ) is 0.3%
+
+## Test the model with 20 different test cases.
+
+The additional requirement for this project need also test this model with 20 test cases.
+
+```{r}
+pred_final <- predict(modFitrf, pre_testingDataSet)
+pred_final
+```
+
